@@ -3,7 +3,7 @@
 # Installing `tpm2_tools` (or similar) is required. This can be installed
 # from your package manager.
 # This script may need sudo permissions to run the `tpm_*` commands.
-
+#
 # Heavily referenced:
 # https://gist.github.com/kenplusplus/f025d04047bc044e139d105b4c708d78
 
@@ -11,10 +11,8 @@ import argparse
 import hashlib
 import logging
 import os
-import re
 import subprocess
 import sys
-import textwrap
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -150,10 +148,14 @@ if __name__ == "__main__":
     gen_parser = subparsers.add_parser("gen", help = "Generate keys")
     quote_parser = subparsers.add_parser("quote", help = "Create a quote")
     quote_parser.add_argument("--nonce", help = "The nonce to use to create the quote")
+    quote_parser.add_argument("--output", "-O", help = "Output path (usually pcr.bin)")
     quote_parser.add_argument("files", help = "The files to verify", nargs = "+", type = argparse.FileType("r"))
     check_quote_parser = subparsers.add_parser("check_quote", help = "Check a quote")
     check_quote_parser.add_argument("--nonce", help = "The nonce that was used for the quote")
-    check_quote_parser.add_argument("--sig", help = "The file with the signature to check against", type = argparse.FileType("r"), required = True)
+    check_quote_parser.add_argument("--public", help = "The public key of the host machine (default 'keys/rsa_ak.pub')")
+    check_quote_parser.add_argument("--message", help = "The message from the host machine (default 'quotes/pcr_quote.plain)")
+    check_quote_parser.add_argument("--signature", help = "The signature from the host machine (default 'quotes/pcr_quote.signature)")
+    check_quote_parser.add_argument("--pcr", help = "The PCR to check against (usually pcr.bin)", required = True)
     args = parser.parse_args()
 
     logger.debug(f"parser arguments: {args}")
@@ -200,34 +202,33 @@ if __name__ == "__main__":
         nonce = ""
         if args.nonce:
             nonce = args.nonce
+        pcr_bin_path = args.output or "quotes/pcr.bin"
 
         logger.debug("Creating quote")
-        res = get_subprocess_result(tpm2_create_quote(nonce = nonce))
+        res = get_subprocess_result(tpm2_create_quote(
+            pcr_bin_path = pcr_bin_path,
+            nonce = nonce,
+        ))
 
-        maybe_match = re.search(r"sig: (.*)$", res, flags = re.MULTILINE)
-        if maybe_match is None:
-            logger.fatal("Couldn't find the sig in result:\n{res}")
-        else:
-            print(maybe_match.group(1))
-            logger.info("Success")
+        logger.info("Success")
 
     elif args.command == "check_quote":
         nonce = ""
         if args.nonce:
             nonce = args.nonce
 
-        # Get sig
-        sig = args.sig.read().strip("\n")
+        ak_public_path = args.public or "keys/rsa_ak.pub"
+        plain_path = args.message or "quotes/pcr_quote.plain"
+        sig_path = args.signature or "quotes/pcr_quote.signature"
+        pcr_bin_path = args.pcr
 
         logger.debug("Checking quotes")
-        res = get_subprocess_result(tpm2_check_quote(nonce = nonce))
+        res = get_subprocess_result(tpm2_check_quote(
+            ak_public_path = ak_public_path,
+            plain_path = plain_path,
+            sig_path = sig_path,
+            pcr_bin_path = pcr_bin_path,
+            nonce = nonce,
+        ))
 
-        maybe_match = re.search(r"sig: (.*)$", res, flags = re.MULTILINE)
-        if maybe_match is None:
-            logger.fatal("Couldn't find the sig in result:\n{res}")
-        elif maybe_match.group(1) != sig:
-            logger.fatal("Signature was incorrect.")
-            logger.fatal(sig)
-            logger.fatal(maybe_match.group(1))
-        else:
-            logger.info("Success")
+        logger.info("Success")

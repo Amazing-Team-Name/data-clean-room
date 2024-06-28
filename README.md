@@ -38,4 +38,5 @@ This will require (from the previous steps, the paths can be passed in as comman
 - `quotes/pcr_quote.plain`
 - `quotes/pcr_quote.signature`
 - `pcr.bin`
+
 The program will return a non-zero exit code along with some log messages if the verification is not successful.
